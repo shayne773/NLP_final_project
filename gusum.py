@@ -1,4 +1,5 @@
 import nltk
+import string
 from nltk.tag import pos_tag
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -58,23 +59,24 @@ class Vertex:
         
         #sentence features
         self.tokens = nltk.word_tokenize(sentence)
-        self.length = len([token for token in self.tokens if token.isalpha()]) #get sentence length -> number of words in sentence
+        self.length = len([token for token in self.tokens if token not in string.punctuation]) #get sentence length -> number of words in sentence
         tagged_sent = pos_tag(sentence.split())
         propernouns = [word for word,pos in tagged_sent if pos == 'NNP']
         self.num_propernouns = len(propernouns) #get number of proper nouns in the sentence
-        self.position = position #get sentence position in the documen
+        self.position = position #get sentence position in the document
         self.num_numerical_tokens = len([token for token in self.tokens if token.isdigit()]) #get the number of numerical tokens in sentence
 
     def score_vertex(self, max_sentence_length: int, num_sentences: int) -> int:
-        self.length_score = self.length/max_sentence_length
+
+        self.length_score = self.length/max_sentence_length if max_sentence_length!=0 else 0
 
         if (self.position==0 or self.position==num_sentences-1):
             self.position_score = 1
         else:    
-            self.position_score = (num_sentences-self.position)/num_sentences
+            self.position_score = (num_sentences-self.position)/num_sentences if num_sentences!=0 else 0
 
-        self.propernoun_score = self.num_propernouns/self.length
-        self.numerical_token_score = self.num_numerical_tokens/self.length
+        self.propernoun_score = self.num_propernouns/self.length if self.length!=0  else 0
+        self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
 
         self.score = (self.length_score+self.position_score+self.propernoun_score+self.numerical_token_score)*self.centrality
         return self.score
