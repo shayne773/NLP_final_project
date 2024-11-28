@@ -2,7 +2,7 @@
 #ROUGE-2: ~0.2–0.4+ is reasonable.
 #ROUGE-L: ~0.2–0.5+ is expected.
 #ROUGE-WE-1 : 0.5–0.8+ for good summaries.
-from rouge_we import *
+#from rouge_we import *
 from rouge_1 import *
 from rouge_2 import *
 from rouge_L import *
@@ -36,19 +36,21 @@ pd.DataFrame(columns=columns).to_csv(result_we_file, index=False)
 
 for i in range(len(df)):
     try:
+
+        print(f'ID: {df['id'][i]}')
         g = Graph(document=df['article'][i])
 
         get_sum = ' '.join([s[0] for s in g.summarize()])
-
+        
         row_1 = (df['id'][i],) + rouge_1(df['highlights'][i], get_sum)
         row_2 = (df['id'][i],) + rouge_2(df['highlights'][i], get_sum, 2)
         row_L = (df['id'][i],) + rouge_L(df['highlights'][i], get_sum)
-        row_we = (df['id'][i],) + rouge_we(df['highlights'][i], get_sum, word_vectors)
+        #row_we = (df['id'][i],) + rouge_we(df['highlights'][i], get_sum, word_vectors)
 
         pd.DataFrame([row_1], columns=columns).to_csv(result_1_file, mode='a', index=False, header=False)
         pd.DataFrame([row_2], columns=columns).to_csv(result_2_file, mode='a', index=False, header=False)
         pd.DataFrame([row_L], columns=columns).to_csv(result_L_file, mode='a', index=False, header=False)
-        pd.DataFrame([row_we], columns=columns).to_csv(result_we_file, mode='a', index=False, header=False)
+        #pd.DataFrame([row_we], columns=columns).to_csv(result_we_file, mode='a', index=False, header=False)
 
     except Exception as e:
         
