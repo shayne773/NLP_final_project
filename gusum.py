@@ -3,6 +3,7 @@ import string
 from nltk.tag import pos_tag
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
 class Graph:
 
@@ -22,18 +23,17 @@ class Graph:
             self.vertices.append(vertex)
 
 
-        #-----------should be replaced by using sentence bert, using sklearn for placeholder----------
-        #initialize edges
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(self.sentences)
-        similarity_matrix = cosine_similarity(tfidf_matrix)
+        # Initialize edges using Sentence BERT
+        model = SentenceTransformer('bert-base-nli-mean-tokens')  # Load the pre-trained model
+        sentence_embeddings = model.encode(self.sentences)  # Get sentence embeddings
+        # Compute similarity matrix using cosine similarity
+        similarity_matrix = cosine_similarity(sentence_embeddings)
         # Convert similarity matrix into 2D array for edges
         self.edges = similarity_matrix.tolist()
-        #get centrality score for each vertex
-        self.centralities = [sum(row) for row in self.edges]
+        #compute sentence centralities
+        self.centralities = [sum(row) for row in similarity_matrix]
         for i, vertex in enumerate(self.vertices):
             vertex.centrality = self.centralities[i]
-        #-----------should be replaced by using sentence bert, using sklearn for placeholder----------
 
     
     #outputs the top three scored sentences in the document (will be changed later)
@@ -79,15 +79,16 @@ class Vertex:
         self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
 
         self.score = (self.length_score+self.position_score+self.propernoun_score+self.numerical_token_score)*self.centrality
+
         return self.score
 
 
 #testing
 if __name__ == "__main__":
 
-    '''
+    
     document = 'Technology is evolving at an unprecedented pace, reshaping industries and societies worldwide. Artificial intelligence, in particular, has transformed how we work, communicate, and solve problems. However, this rapid advancement also raises ethical questions about privacy, bias, and accountability. As we embrace innovation, it is crucial to address these challenges responsibly.'
     g = Graph(document=document)
     print(g.summarize())
-    '''
+    
     
