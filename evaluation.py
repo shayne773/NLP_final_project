@@ -45,12 +45,12 @@ for i in range(len(df)):
         row_1 = (df['id'][i],) + rouge_1(df['highlights'][i], get_sum)
         row_2 = (df['id'][i],) + rouge_2(df['highlights'][i], get_sum, 2)
         row_L = (df['id'][i],) + rouge_L(df['highlights'][i], get_sum)
-        #row_we = (df['id'][i],) + rouge_we(df['highlights'][i], get_sum, word_vectors)
+        row_we = (df['id'][i],) + rouge_we(df['highlights'][i], get_sum, word_vectors)
 
         pd.DataFrame([row_1], columns=columns).to_csv(result_1_file, mode='a', index=False, header=False)
         pd.DataFrame([row_2], columns=columns).to_csv(result_2_file, mode='a', index=False, header=False)
         pd.DataFrame([row_L], columns=columns).to_csv(result_L_file, mode='a', index=False, header=False)
-        #pd.DataFrame([row_we], columns=columns).to_csv(result_we_file, mode='a', index=False, header=False)
+        pd.DataFrame([row_we], columns=columns).to_csv(result_we_file, mode='a', index=False, header=False)
 
     except Exception as e:
         
