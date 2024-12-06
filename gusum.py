@@ -7,6 +7,8 @@ from sentence_transformers import SentenceTransformer
 import pickle
 import time
 import torch
+import spacy
+import pytextrank
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -24,21 +26,20 @@ weights = {
   "length" : 0.2,
   "position": 0.35,
   "proper noun": 0.45,
-  "numeric": 0.1,
-  "tfidf": 0.2,
-  "noun_phrase": 0.3
+  "keyword": 0.2,
+  "numeric": 0,
+  "tfidf": 0,
+  "noun_phrase": 0
+
 }
 
 
-def extract_noun_phrases(tagged_sent):
-    grammar = "NP: {<DT>?<JJ>*<NN.*>+}"  # Define the grammar for noun phrases
-    cp = nltk.RegexpParser(grammar=grammar)
-    tree = cp.parse(tagged_sent)
-    noun_phrases = []
-    for subtree in tree.subtrees(filter=lambda x: x.label() == "NP"):
-        np = " ".join(word for word, tag in subtree.leaves())  # Extract the words from the leaves
-        noun_phrases.append(np)
-    return noun_phrases
+def extract_textrank_keywords(document, num_keywords) -> list:
+    nlp = spacy.load("en_core_web_sm")
+    nlp.add_pipe("textrank")
+    doc = nlp(document)
+    keywords = [phrase.text.lower() for phrase in doc._.phrases[:num_keywords]] 
+    return keywords
 
 class Graph:
 
@@ -53,6 +54,7 @@ class Graph:
         self.tfidf_dict = {}
         self.sentence_tfidf_scores = []
         self.num_noun_phrases = 0
+        self.keywords = extract_textrank_keywords(document=document, num_keywords=15)
 
         #initialize vertices
         for position, sentence in enumerate(self.sentences):
@@ -84,7 +86,6 @@ class Graph:
         '''
         for i, vertex in enumerate(self.vertices):
             vertex.centrality = self.centralities[i]
-
         
 
         '''
@@ -111,7 +112,7 @@ class Graph:
         #scores = [(vertex.original_sentence, vertex.score_vertex(self.max_sentence_length, self.num_sentences)) for vertex in self.vertices]
 
         #------enable this for testing added tf-idf feature-------
-        scores = [(vertex.original_sentence, vertex.score_vertex_2(self.max_sentence_length, self.num_sentences, self.num_noun_phrases)) for vertex in self.vertices]
+        scores = [(vertex.original_sentence, vertex.score_vertex_2(self.max_sentence_length, self.num_sentences, self.num_noun_phrases, self.keywords)) for vertex in self.vertices]
         #---------------------------------------------------------
         sorted_scores = sorted(scores, key = lambda x : x[1], reverse = True)
         return [sorted_scores[i] for i in range(3)]
@@ -131,16 +132,19 @@ class Vertex:
         self.tfidf_score = 0
         self.noun_phrase_score = 0
         self.noun_phrases = []
-        
-        #sentence features
+        self.keywords_score = 0
         self.tokens = nltk.word_tokenize(sentence)
+
+        #sentence features
         self.length = len([token for token in self.tokens if token not in string.punctuation]) #get sentence length -> number of words in sentence
         tagged_sent = pos_tag(self.tokens)
         propernouns = [word for word,pos in tagged_sent if pos == 'NNP']
         self.num_propernouns = len(propernouns) #get number of proper nouns in the sentence
         self.position = position #get sentence position in the document
         self.num_numerical_tokens = len([token for token in self.tokens if token.isdigit()]) #get the number of numerical tokens in sentence
-        self.noun_phrases = extract_noun_phrases(tagged_sent) #get the noun phfases in the sentence
+
+    def calculate_textrank_score(self, keywords) -> int:
+        return sum(1 for token in self.tokens if token.lower() in keywords)
 
     def calculate_tfidf_score(self, tfidf_dict) -> None:
         self.tfidf_score = sum(tfidf_dict.get(word, 0) for word in self.tokens if word.isalnum())
@@ -164,7 +168,7 @@ class Vertex:
     
     
     #same as score_vertex, but considers td-idf scores of sentneces. Also assigns 
-    def score_vertex_2(self, max_sentence_length: int, num_sentences: int, num_noun_phrases: int) -> int:
+    def score_vertex_2(self, max_sentence_length: int, num_sentences: int, num_noun_phrases: int, keywords: list) -> int:
 
         self.length_score = self.length/max_sentence_length if max_sentence_length!=0 else 0
 
@@ -174,13 +178,14 @@ class Vertex:
             self.position_score = (num_sentences-self.position)/num_sentences if num_sentences!=0 else 0
 
         self.propernoun_score = self.num_propernouns/self.length if self.length!=0  else 0
-        self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
-        self.noun_phrase_score = len(self.noun_phrases)/num_noun_phrases
+        #self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
+        max_keywords_score = len(keywords)
+        self.keywords_score = self.calculate_textrank_score(keywords=keywords)/max_keywords_score if max_keywords_score !=0 else 0
 
         self.score = (self.length_score*weights["length"]
                       +self.position_score*weights["position"]
                       +self.propernoun_score*weights["proper noun"]
-                      +self.noun_phrase_score*weights["noun_phrase"])*self.centrality
+                      +self.keywords_score*weights["keyword"])*self.centrality
 
         return self.score
 
