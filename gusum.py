@@ -21,18 +21,22 @@ model = SentenceTransformer('sentence-transformers/bert-base-nli-mean-tokens', d
 with open('vectorizer.pkl', 'rb') as f:
         vectorizer = pickle.load(f)
 
-
 #feature weights
-weights = {
-  "length" : 0.2,
-  "position": 0.35,
-  "proper noun": 0.45,
-  "keyword": 0.2,
-  "numeric": 0,
-  "tfidf": 0.3,
+feature_weights = {
+  "length" : 1,
+  "position": 1,
+  "proper noun": 1,
+  "keyword": 0,
+  "numeric": 1,
+  "tfidf": 0,
   "noun_phrase": 0
 }
 
+#edge weights
+edge_weights = {
+    "forwards" : 0.4,
+    "backwards" : 0.6
+}
 
 def extract_textrank_keywords(document, num_keywords) -> list:
     nlp = spacy.load("en_core_web_sm")
@@ -43,7 +47,7 @@ def extract_textrank_keywords(document, num_keywords) -> list:
 
 class Graph:
 
-    def __init__(self, document) -> None:
+    def __init__(self, document, forward_weight, backward_weight) -> None:
         
         self.max_sentence_length = 0
         self.sentences = nltk.sent_tokenize(document)
@@ -54,8 +58,8 @@ class Graph:
         self.tfidf_dict = {}
         self.sentence_tfidf_scores = []
         self.num_noun_phrases = 0
-        self.keywords = extract_textrank_keywords(document=document, num_keywords=15)
-        #self.keywords = []
+        #self.keywords = extract_textrank_keywords(document=document, num_keywords=10)
+        self.keywords = []
 
         #initialize vertices
         for position, sentence in enumerate(self.sentences):
@@ -65,14 +69,25 @@ class Graph:
             self.vertices.append(vertex)
 
         self.sentence_embeddings = model.encode(self.sentences, batch_size=32, show_progress_bar=False)  # Batch encoding
-        
+
         # Compute similarity matrix using cosine similarity
         similarity_matrix = cosine_similarity(self.sentence_embeddings)
-        self.edges = similarity_matrix.tolist()  # Convert similarity matrix into 2D array for edges
+        weighted_similarity_matrix = similarity_matrix.copy()
 
-        # Compute sentence centralities
-        self.centralities = [sum(row) for row in similarity_matrix]
-        
+        #add weights to forward/backward edges
+        for (i, row) in enumerate(weighted_similarity_matrix):
+            for (j, col) in enumerate(row):
+                if (i<j):
+                    weighted_similarity_matrix[i][j] = col*forward_weight
+                elif (i>j):
+                    weighted_similarity_matrix[i][j] = col*backward_weight
+                else:
+                    weighted_similarity_matrix[i][j] = 0
+
+        self.edges  = weighted_similarity_matrix.tolist()  # Convert similarity matrix into 2D array for edges
+        self.centralities = [sum(row) for row in weighted_similarity_matrix]
+
+
         for i, vertex in enumerate(self.vertices):
             vertex.centrality = self.centralities[i]
         
@@ -202,15 +217,16 @@ class Vertex:
             self.position_score = (num_sentences-self.position)/num_sentences if num_sentences!=0 else 0
 
         self.propernoun_score = self.num_propernouns/self.length if self.length!=0  else 0
-        #self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
+        self.numerical_token_score = self.num_numerical_tokens/self.length if self.length!=0 else 0
         max_keywords_score = len(keywords)
         self.keywords_score = self.calculate_textrank_score(keywords=keywords)/max_keywords_score if max_keywords_score !=0 else 0
 
-        self.score = (self.length_score*weights["length"]
-                      +self.position_score*weights["position"]
-                      +self.propernoun_score*weights["proper noun"]
-                      +self.keywords_score*weights["keyword"]
-                      +self.tfidf_score*weights["tfidf"])*self.centrality
+        self.score = (self.length_score*feature_weights["length"]
+                      +self.position_score*feature_weights["position"]
+                      +self.propernoun_score*feature_weights["proper noun"]
+                      +self.numerical_token_score*feature_weights["numeric"]
+                      +self.keywords_score*feature_weights["keyword"]
+                      +self.tfidf_score*feature_weights["tfidf"])*self.centrality
 
         return self.score
     
@@ -226,5 +242,4 @@ if __name__ == "__main__":
         g = Graph(document=document)
         print(g.summarize_with_diversity())
     print(time.time()-start_time)
-    
     
